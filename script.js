@@ -389,7 +389,6 @@ toggleButton.addEventListener("click", () => {
 });
 
 const STORAGE_KEY = 'infinite_wordsearch_game_state_v0.1';
-
 // Save the current game state
 function saveGame() {
     const state = {
@@ -438,13 +437,16 @@ function loadGame() {
 }
 
 function resetGame() {
+    localStorage.removeItem(STORAGE_KEY);
     totalScore = 0;
     displayedScore = 0;
+    document.getElementById("scoreDisplay").textContent = 0;
     dictionaryData = {};
     shufflePoints = 0;
     grid = [];
     initGrid();
-    loadGame();
+    updateDictionaryDisplay();
+    updateShuffleMeter();
     drawGrid();
 }
 
@@ -498,8 +500,8 @@ resetBtn.addEventListener("click", () => {
 });
 
 confirmBtn.addEventListener("click", () => {
-  modal.classList.add("hidden");
   resetGame();
+  modal.classList.add("hidden");
 });
 
 cancelBtn.addEventListener("click", () => {

@@ -21,7 +21,10 @@ canvas {
   font-weight: bold;
   color: #fff;
 }
-
+#dictionaryCount {
+  font-weight: bold;
+  color: #fff;
+}
 #hud {
   margin-top: 15px;
   color: #fff;
@@ -51,16 +54,22 @@ canvas {
   transform: translateX(-50%);
   color: #fff;
   font-family: 'Arial', sans-serif;
-  font-size: 1.4rem;
   font-weight: bold;
+  font-size: 1.6rem;
   text-shadow: 0 0 5px rgba(0,0,0,0.6);
   opacity: 0;
-  animation: popupFloat 1.3s ease-out forwards;
+  animation: popupFloat 2s ease-out forwards;
   white-space: nowrap;
 }
 
 .wordPopup.newWord {
-  color: #ffeb3b;
+  color: #4caf50;
+  font-size: 2rem;
+  animation: popupFloat 3s ease-out forwards;
+}
+
+.wordPopup.invalidWord {
+  color: #ff3b3b;
 }
 
 @keyframes popupFloat {
@@ -133,4 +142,86 @@ canvas {
 
 .scoreText {
   text-align: right;
+}
+
+#shuffleContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 10px;
+}
+
+#shuffleBarOuter {
+  width: 600px;
+  height: 16px;
+  border: 2px solid #fff;
+  background-color: #333;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 6px;
+  cursor: not-allowed; /* default disabled state */
+  position: relative;
+  user-select: none;
+}
+
+/* enabled/ready state */
+#shuffleBarOuter.ready {
+  cursor: pointer;
+  border-color: #3cd35f;
+  box-shadow: 0 0 6px rgba(60,211,95,0.12);
+}
+ 
+/* label centered on the bar */
+#shuffleLabel {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  color: #fff;
+  font-weight: bold;
+  border-color: #777;
+  top: 7px;
+  font-size: 0.9rem;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+#shuffleBarInner {
+  height: 100%;
+  width: 0%;
+  background-color: #4caf50;
+  transition: width 0.3s ease;
+}
+
+#resetConfirm {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#resetConfirm.hidden { display: none; }
+.modal {
+  background: #222;
+  padding: 20px;
+  border-radius: 10px;
+  text-align: center;
+  color: white;
+}
+.modal button {
+  margin: 10px;
+}
+#resetButton {
+  background-color: #a53935; /* red */
+  color: #fff;
+  border: 1px solid #571c1c;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.12s ease, transform 0.06s ease;
+  margin-top: 10px;
 }

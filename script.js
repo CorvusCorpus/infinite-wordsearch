@@ -7,6 +7,14 @@ const CELL_SIZE = canvas.width / GRID_SIZE;
 const HIT_RADIUS = CELL_SIZE * 0.4;
 let grid = [];
 
+let shufflePoints = 0;
+const shuffleThreshold = 3000;
+
+const shuffleBarOuter = document.getElementById("shuffleBarOuter");
+const shuffleBarInner = document.getElementById("shuffleBarInner");
+const shuffleLabel = document.getElementById("shuffleLabel");
+
+
 const letterValues = {
   E: 1, A: 1, I: 1, O: 1, N: 1, R: 1, T: 1, L: 1, S: 1, U: 1,
   D: 2, G: 2,
@@ -32,7 +40,35 @@ function randomLetter() {
 }
 
 let totalScore = 0;
+let displayedScore = 0; 
 let dictionaryData = {}; 
+
+function addPoints(points) {
+  totalScore += points;
+  animateScore();
+}
+
+function animateScore() {
+  const start = displayedScore;
+  const end = totalScore;
+  const duration = 600; // milliseconds
+  const startTime = performance.now();
+
+  function update(currentTime) {
+    const elapsed = currentTime - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    displayedScore = Math.floor(start + (end - start) * progress);
+    document.getElementById("scoreDisplay").textContent = displayedScore;
+
+    if (progress < 1) {
+      requestAnimationFrame(update);
+    } else {
+      displayedScore = end;
+    }
+  }
+
+  requestAnimationFrame(update);
+}
 
 function calculateScore(word) {
   const base = word.length * 10;
@@ -76,7 +112,7 @@ function drawGrid() {
   // Draw connecting line
   if (selectedCells.length > 1) {
     ctx.strokeStyle = "rgba(0, 255, 0, 0.6)";
-    ctx.lineWidth = 5;
+    ctx.lineWidth = 10;
     ctx.beginPath();
     const first = selectedCells[0];
     ctx.moveTo(first.x * CELL_SIZE + CELL_SIZE / 2, first.y * CELL_SIZE + CELL_SIZE / 2);
@@ -173,18 +209,21 @@ function onPointerUp() {
   if (wordbank[word] && word.length >= 4) {
     const isNew = !(word in dictionaryData);
     const points = calculateScore(word);
-    totalScore += points;
-    document.getElementById("scoreDisplay").textContent = totalScore;
+    addPoints(points);
 
     showWordPopup(word, points, isNew);
 
-    if (!dictionaryData[word]) {
+    if (isNew && !dictionaryData[word]) {
       dictionaryData[word] = {
         score: points,
         timestamp: Date.now()
       };
     }
 
+    shufflePoints += points;
+    if (shufflePoints > shuffleThreshold) shufflePoints = shuffleThreshold;
+    
+    updateShuffleMeter();
     clearSelectedLetters();
     applyGravity();
     refillGrid();
@@ -192,7 +231,8 @@ function onPointerUp() {
     updateDictionaryDisplay();
     saveGame();
   } else {
-    console.log(`❌ ${word.toUpperCase()} not valid`);
+    if(word.length > 0)
+        showFailedWordPopup(word);
   }
 
   selectedCells = [];
@@ -207,6 +247,14 @@ function isAdjacent(a, b) {
 }
 
 function selectCell(cell) {
+  const last = selectedCells[selectedCells.length - 2];
+  if (last && last.x === cell.x && last.y === cell.y) {
+    selectedCells.pop();
+    currentWord = currentWord.slice(0, -1);
+    updateWordDisplay();
+    drawGrid();
+    return;
+  }
   if (selectedCells.some(c => c.x === cell.x && c.y === cell.y)) return;
   selectedCells.push(cell);
   currentWord += grid[cell.y][cell.x];
@@ -259,15 +307,34 @@ function showWordPopup(word, points, isNew) {
   const container = document.getElementById("wordPopups");
 
   const popup = document.createElement("div");
-  popup.style.top = `${Math.random() * 40}px`;
+  popup.style.top = `${-160}px`;
   popup.className = "wordPopup" + (isNew ? " newWord" : "");
-  popup.textContent = `${word.toUpperCase()}  +${points} pts` + (isNew ? "  (NEW!)" : "");
+  if (word === "SHUFFLE!") {
+    popup.textContent = `🔀 SHUFFLE!`;
+  } else {
+    popup.textContent = `✅ ${word.toUpperCase()}  +${points} pts` + (isNew ? "  (NEW!)" : "");
+  }
 
   container.appendChild(popup);
 
   // Auto-remove after animation
-  setTimeout(() => popup.remove(), 1400);
+  setTimeout(() => popup.remove(), 2400);
 }
+
+function showFailedWordPopup(word) {
+  const container = document.getElementById("wordPopups");
+
+  const popup = document.createElement("div");
+  popup.style.top = `${-140}px`;
+  popup.className = "wordPopup invalidWord";
+  popup.textContent = `❌ ${word.toUpperCase()}` + (word.length >=4 ? " is not valid!" : " is too short!");
+
+  container.appendChild(popup);
+
+  // Auto-remove after animation
+  setTimeout(() => popup.remove(), 2400);
+}
+
 
 let sortMode = "alphabetical";
 
@@ -296,7 +363,8 @@ function updateDictionaryDisplay() {
     const scoreSpan = document.createElement("span");
     scoreSpan.className = "scoreText";
     scoreSpan.textContent = `${data.score} pts`;
-
+    
+    document.getElementById("dictionaryCount").textContent =  Object.keys(dictionaryData).length > 0 ? `Dictionary (${ Object.keys(dictionaryData).length})` : "Dictionary";
     div.appendChild(wordSpan);
     div.appendChild(scoreSpan);
 
@@ -320,14 +388,15 @@ toggleButton.addEventListener("click", () => {
   updateDictionaryDisplay();
 });
 
-const STORAGE_KEY = 'infinite_wordsearch_game_state';
+const STORAGE_KEY = 'infinite_wordsearch_game_state_v0.1';
 
 // Save the current game state
 function saveGame() {
     const state = {
         totalScore: totalScore,
         dictionaryData: {},
-        grid: grid
+        grid: grid,
+        shufflePoints: shufflePoints ? shufflePoints : 0
     };
 
     for (const word in dictionaryData) {
@@ -351,7 +420,9 @@ function loadGame() {
 
     const state = JSON.parse(saved);
     totalScore = state.totalScore;
+    displayedScore = totalScore;
     grid = state.grid;
+    shufflePoints = state.shufflePoints;
 
     dictionaryData = {};
     for (const word in state.dictionaryData) {
@@ -363,14 +434,77 @@ function loadGame() {
 
     document.getElementById("scoreDisplay").textContent = totalScore;
     updateDictionaryDisplay();
+    updateShuffleMeter();
 }
 
 function resetGame() {
     totalScore = 0;
+    displayedScore = 0;
     dictionaryData = {};
+    shufflePoints = 0;
     grid = [];
-    localStorage.removeItem(STORAGE_KEY);
+    initGrid();
+    loadGame();
+    drawGrid();
 }
+
+function updateShuffleMeter() {
+  const progress = (shufflePoints / shuffleThreshold) * 100;
+  shuffleBarInner.style.width = `${progress}%`;
+  if (shuffleLabel) shuffleLabel.textContent = `Shuffle (${shufflePoints} / ${shuffleThreshold})`;
+
+  if (shufflePoints >= shuffleThreshold) {
+    shuffleBarOuter.classList.add("ready");
+    shuffleBarOuter.setAttribute('aria-disabled', 'false');
+  } else {
+    shuffleBarOuter.classList.remove("ready");
+    shuffleBarOuter.setAttribute('aria-disabled', 'true');
+  }
+}
+
+shuffleBarOuter.addEventListener("click", () => {
+  if (shufflePoints < shuffleThreshold) return;
+
+  // Randomly shuffle all letter positions
+  const flat = grid.flat();
+  for (let i = flat.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [flat[i], flat[j]] = [flat[j], flat[i]];
+  }
+
+  // Rebuild the grid
+  for (let y = 0; y < GRID_SIZE; y++) {
+    for (let x = 0; x < GRID_SIZE; x++) {
+      grid[y][x] = flat[y * GRID_SIZE + x];
+    }
+  }
+
+  // Reset the meter
+  shufflePoints = 0;
+  updateShuffleMeter();
+  drawGrid();
+
+  // Optional visual feedback
+  showWordPopup("SHUFFLE!", 0, false);
+});
+
+const resetBtn = document.getElementById("resetButton");
+const modal = document.getElementById("resetConfirm");
+const confirmBtn = document.getElementById("confirmReset");
+const cancelBtn = document.getElementById("cancelReset");
+
+resetBtn.addEventListener("click", () => {
+  modal.classList.remove("hidden");
+});
+
+confirmBtn.addEventListener("click", () => {
+  modal.classList.add("hidden");
+  resetGame();
+});
+
+cancelBtn.addEventListener("click", () => {
+  modal.classList.add("hidden");
+});
 
 initGrid();
 loadGame();

@@ -8,21 +8,33 @@
 </head>
 <body>
   <h1>Infinite Wordsearch</h1>
+  <div id="hud">
+    <div id="currentWord">Current word: <span id="wordText">—</span></div>
+    <div id="score">Score: <span id="scoreDisplay">0</span></div>
+  </div>
   <div id="gameWrapper">
     <canvas id="gameCanvas" width="600" height="600"></canvas>
-
     <div id="dictionaryContainer">
       <div id="dictionaryHeader">
-        <span>Dictionary</span>
+        <span id="dictionaryCount">Dictionary</span>
         <button id="toggleOrder">Sort: Alphabetical</button>
       </div>
       <div id="dictionaryList"></div>
     </div>
   </div>
-
-  <div id="hud">
-    <div id="currentWord">Current word: <span id="wordText">—</span></div>
-    <div id="score">Score: <span id="scoreDisplay">0</span></div>
+  <div id="shuffleContainer">
+    <div id="shuffleBarOuter" aria-disabled="true">
+      <div id="shuffleBarInner"></div>
+      <div id="shuffleLabel" class="shuffleLabel">Shuffle (0 / 3000)</div>
+    </div>
+  </div>
+  <button id="resetButton">Reset Game</button>
+  <div id="resetConfirm" class="hidden">
+    <div class="modal">
+      <p>Are you sure you want to reset your game? All progress (dictionary and score) will be lost.</p>
+      <button id="confirmReset">Yes</button>
+      <button id="cancelReset">No</button>
+    </div>
   </div>
   <div id="wordPopups"></div>
   <script src="script.js"></script>

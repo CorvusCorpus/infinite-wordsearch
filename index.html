@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Infinite Wordsearch</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>Infinite Wordsearch</h1>
+  <div id="gameWrapper">
+    <canvas id="gameCanvas" width="600" height="600"></canvas>
+
+    <div id="dictionaryContainer">
+      <div id="dictionaryHeader">
+        <span>Dictionary</span>
+        <button id="toggleOrder">Sort: Alphabetical</button>
+      </div>
+      <div id="dictionaryList"></div>
+    </div>
+  </div>
+
+  <div id="hud">
+    <div id="currentWord">Current word: <span id="wordText">—</span></div>
+    <div id="score">Score: <span id="scoreDisplay">0</span></div>
+  </div>
+  <div id="wordPopups"></div>
+  <script src="script.js"></script>
+</body>
+</html>
+

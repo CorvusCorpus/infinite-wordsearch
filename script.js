@@ -14,6 +14,14 @@ const shuffleBarOuter = document.getElementById("shuffleBarOuter");
 const shuffleBarInner = document.getElementById("shuffleBarInner");
 const shuffleLabel = document.getElementById("shuffleLabel");
 
+let pointerCanvasPos = null;        // real pointer position relative to canvas
+let smoothedPointer = null;         // current animated position relative to canvas
+let animating = false;
+const SMOOTH_FACTOR = 0.18;
+
+let fallingTiles = []; // { x, fromY, toY, letter, progress, duration, currentY }
+let movingTiles = [];
+let lastAnimTime = null;
 
 const letterValues = {
   E: 1, A: 1, I: 1, O: 1, N: 1, R: 1, T: 1, L: 1, S: 1, U: 1,
@@ -98,34 +106,82 @@ function drawGrid() {
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
 
+  // build a Set of destination keys (spread the arrays so Set contains strings, not arrays)
+  const animatingDest = new Set([
+    ...fallingTiles.map(t => `${t.x},${t.toY}`),
+    ...movingTiles.map(t => `${t.toX},${t.toY}`)
+  ]);
+
   for (let y = 0; y < GRID_SIZE; y++) {
     for (let x = 0; x < GRID_SIZE; x++) {
+      const key = `${x},${y}`;
       const isSelected = selectedCells.some(c => c.x === x && c.y === y);
-      ctx.fillStyle = isSelected ? "#777" : "white";
+
+      // draw cell background and border
+      ctx.fillStyle = isSelected ? "#333" : "#222";
+      ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
       ctx.strokeStyle = "#555";
       ctx.lineWidth = 2;
       ctx.strokeRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
-      ctx.fillText(grid[y][x], x * CELL_SIZE + CELL_SIZE / 2, y * CELL_SIZE + CELL_SIZE / 2);
+
+      // only draw the static letter if this destination is not being animated
+      if (!animatingDest.has(key) && grid[y][x]) {
+        ctx.fillStyle = isSelected ? "#fff" : "white";
+        ctx.fillText(grid[y][x], x * CELL_SIZE + CELL_SIZE / 2, y * CELL_SIZE + CELL_SIZE / 2);
+      }
     }
   }
 
+  // draw falling tiles (on top)
+  for (const t of fallingTiles) {
+    const px = t.x * CELL_SIZE + CELL_SIZE / 2;
+    const py = (t.currentY * CELL_SIZE) + CELL_SIZE / 2;
+    ctx.fillStyle = "white";
+    ctx.fillText(t.letter, px, py);
+  }
+
+  // draw moving tiles (shuffle) on top
+  for (const t of movingTiles) {
+    const px = (t.currentX * CELL_SIZE) + CELL_SIZE / 2;
+    const py = (t.currentY * CELL_SIZE) + CELL_SIZE / 2;
+    ctx.fillStyle = "white";
+    ctx.fillText(t.letter, px, py);
+  }
+
   // Draw connecting line
-  if (selectedCells.length > 1) {
+  if (selectedCells.length > 0) {
     ctx.strokeStyle = "rgba(0, 255, 0, 0.6)";
     ctx.lineWidth = 10;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
     ctx.beginPath();
     const first = selectedCells[0];
     ctx.moveTo(first.x * CELL_SIZE + CELL_SIZE / 2, first.y * CELL_SIZE + CELL_SIZE / 2);
+
     for (let i = 1; i < selectedCells.length; i++) {
       const c = selectedCells[i];
       ctx.lineTo(c.x * CELL_SIZE + CELL_SIZE / 2, c.y * CELL_SIZE + CELL_SIZE / 2);
     }
+
+    if (isDragging && smoothedPointer) {
+      ctx.lineTo(smoothedPointer.x, smoothedPointer.y);
+    }
+
     ctx.stroke();
   }
 }
 
 function isValidWord(word) {
   return wordbank[word.toLowerCase()] === 1;
+}
+
+function setPointerFromClient(clientX, clientY) {
+  const rect = canvas.getBoundingClientRect();
+  const relX = clientX - rect.left;
+  const relY = clientY - rect.top;
+  pointerCanvasPos = { x: relX, y: relY };
+  if (!smoothedPointer) smoothedPointer = { x: relX, y: relY };
+  startAnimationLoop();
 }
 
 let wordbank = {};
@@ -185,12 +241,16 @@ function onPointerDown(e) {
   selectedCells = [];
   currentWord = "";
 
+  setPointerFromClient(e.clientX, e.clientY);
+
   const cell = getCellFromCoords(e.clientX, e.clientY);
   if (cell) selectCell(cell);
 }
 
 function onPointerMove(e) {
   if (!isDragging) return;
+
+  setPointerFromClient(e.clientX, e.clientY);
 
   const cell = getCellFromCoords(e.clientX, e.clientY);
   if (!cell) return;
@@ -203,6 +263,8 @@ function onPointerMove(e) {
 function onPointerUp() {
   if (!isDragging) return;
   isDragging = false;
+
+  pointerCanvasPos = null;
 
   const word = currentWord.toLowerCase();
 
@@ -225,7 +287,7 @@ function onPointerUp() {
     
     updateShuffleMeter();
     clearSelectedLetters();
-    applyGravity();
+    animateGravityAndRefill();
     refillGrid();
     drawGrid();
     updateDictionaryDisplay();
@@ -262,6 +324,109 @@ function selectCell(cell) {
   drawGrid();
 }
 
+function startAnimationLoop() {
+  if (animating) return;
+  animating = true;
+  requestAnimationFrame(animationStep);
+}
+
+function animationStep(timestamp) {
+  // handle delta time
+  if (!lastAnimTime) lastAnimTime = timestamp;
+  const dt = Math.min(40, timestamp - lastAnimTime); // cap to avoid big jumps
+  lastAnimTime = timestamp;
+
+  // determine pointer target (same as before)
+  let target = null;
+  if (pointerCanvasPos) {
+    target = pointerCanvasPos;
+  } else if (selectedCells.length > 0) {
+    const last = selectedCells[selectedCells.length - 1];
+    target = {
+      x: last.x * CELL_SIZE + CELL_SIZE / 2,
+      y: last.y * CELL_SIZE + CELL_SIZE / 2
+    };
+  }
+
+  if (!smoothedPointer && target) smoothedPointer = { x: target.x, y: target.y };
+  if (smoothedPointer && target) {
+    smoothedPointer.x += (target.x - smoothedPointer.x) * SMOOTH_FACTOR;
+    smoothedPointer.y += (target.y - smoothedPointer.y) * SMOOTH_FACTOR;
+  }
+
+  // update falling tiles
+  let anyFalling = false;
+  for (let i = fallingTiles.length - 1; i >= 0; i--) {
+    const t = fallingTiles[i];
+    t.progress += dt / t.duration;
+    if (t.progress > 1) t.progress = 1;
+    // ease out cubic for nicer feel
+    const p = 1 - Math.pow(1 - t.progress, 3);
+    t.currentY = t.fromY + (t.toY - t.fromY) * p;
+    if (t.progress >= 1) {
+      // finished - ensure final position is exact and remove
+      t.currentY = t.toY;
+      fallingTiles.splice(i, 1);
+    } else {
+      anyFalling = true;
+    }
+  }
+
+  // update moving (shuffle) tiles
+  let anyMoving = false;
+  for (let i = movingTiles.length - 1; i >= 0; i--) {
+    const t = movingTiles[i];
+    t.progress += dt / t.duration;
+    if (t.progress > 1) t.progress = 1;
+    const p = 1 - Math.pow(1 - t.progress, 3);
+    t.currentX = t.fromX + (t.toX - t.fromX) * p;
+    t.currentY = t.fromY + (t.toY - t.fromY) * p;
+    if (t.progress >= 1) {
+      t.currentX = t.toX;
+      t.currentY = t.toY;
+      movingTiles.splice(i, 1);
+    } else {
+      anyMoving = true;
+    }
+  }
+
+  // existing per-cell scale animations (if any)
+  let anyScaling = false;
+  if (typeof selectedVisuals !== "undefined") {
+    for (const key of Object.keys(selectedVisuals)) {
+      const v = selectedVisuals[key];
+      const diff = v.target - v.scale;
+      if (Math.abs(diff) > 0.001) {
+        v.scale += diff * SCALE_SMOOTH;
+        anyScaling = true;
+      } else {
+        v.scale = v.target;
+        if (v.scale === 1) delete selectedVisuals[key];
+      }
+    }
+  }
+
+  drawGrid();
+
+  // continue while pointer active, smoothed pointer not yet at target, scaling or falling/moving still active
+  let continueLoop = false;
+  if (pointerCanvasPos) continueLoop = true;
+  if (target && smoothedPointer) {
+    const dx = Math.abs(smoothedPointer.x - target.x);
+    const dy = Math.abs(smoothedPointer.y - target.y);
+    if (dx * dx + dy * dy > 0.5) continueLoop = true;
+  }
+  if (anyScaling || anyFalling || anyMoving) continueLoop = true;
+
+  if (continueLoop) {
+    requestAnimationFrame(animationStep);
+  } else {
+    animating = false;
+    smoothedPointer = null;
+    lastAnimTime = null;
+  }
+}
+
 function updateWordDisplay() {
   if (currentWord.length === 0) {
     wordDisplay.textContent = "—";
@@ -274,6 +439,70 @@ function clearSelectedLetters() {
   for (const {x, y} of selectedCells) {
     grid[y][x] = null;
   }
+}
+
+function animateGravityAndRefill() {
+  fallingTiles = [];
+  // For each column compute compacted column and final grid column
+  for (let x = 0; x < GRID_SIZE; x++) {
+    // collect existing letters in this column (top -> bottom)
+    const col = [];
+    for (let y = 0; y < GRID_SIZE; y++) {
+      if (grid[y][x] !== null && grid[y][x] !== undefined) col.push({letter: grid[y][x], y});
+    }
+
+    const finalStart = GRID_SIZE - col.length; // index where existing letters start
+    // clear column in logical grid first
+    for (let y = 0; y < GRID_SIZE; y++) grid[y][x] = null;
+
+    // place existing letters into final positions and create falling tiles if moved
+    for (let i = 0; i < col.length; i++) {
+      const letter = col[i].letter;
+      const oldY = col[i].y;
+      const newY = finalStart + i;
+      grid[newY][x] = letter; // logical final location
+
+      if (oldY !== newY) {
+        const dropDistance = Math.abs(newY - oldY);
+        const duration = 160 + dropDistance * 60;
+        fallingTiles.push({
+          x,
+          fromY: oldY,
+          toY: newY,
+          letter,
+          progress: 0,
+          duration,
+          currentY: oldY
+        });
+      } else {
+        // stationary letter remains; no falling tile needed
+      }
+    }
+
+    // now add new letters at the top for empty slots and animate them falling from above
+    const numNew = finalStart;
+    for (let i = 0; i < numNew; i++) {
+      const targetY = i;
+      const newLetter = randomLetter();
+      grid[targetY][x] = newLetter; // logical final location
+      // animate from above (start off-screen at - (numNew - i) so grouping looks natural)
+      const fromY = - (numNew - i);
+      const duration = 220 + (targetY + 1) * 40;
+      fallingTiles.push({
+        x,
+        fromY,
+        toY: targetY,
+        letter: newLetter,
+        progress: 0,
+        duration,
+        currentY: fromY
+      });
+    }
+  }
+
+  // start animation loop
+  lastAnimTime = null;
+  startAnimationLoop();
 }
 
 function applyGravity() {
@@ -364,7 +593,7 @@ function updateDictionaryDisplay() {
     scoreSpan.className = "scoreText";
     scoreSpan.textContent = `${data.score} pts`;
     
-    document.getElementById("dictionaryCount").textContent =  Object.keys(dictionaryData).length > 0 ? `Dictionary (${ Object.keys(dictionaryData).length})` : "Dictionary";
+    document.getElementById("dictionaryCount").textContent = Object.keys(dictionaryData).length > 0 ? `Dictionary (${ Object.keys(dictionaryData).length})` : "Dictionary";
     div.appendChild(wordSpan);
     div.appendChild(scoreSpan);
 
@@ -443,6 +672,7 @@ function resetGame() {
     document.getElementById("scoreDisplay").textContent = 0;
     dictionaryData = {};
     shufflePoints = 0;
+    document.getElementById("dictionaryCount").textContent = "Dictionary (0)";
     grid = [];
     initGrid();
     updateDictionaryDisplay();
@@ -467,24 +697,54 @@ function updateShuffleMeter() {
 shuffleBarOuter.addEventListener("click", () => {
   if (shufflePoints < shuffleThreshold) return;
 
-  // Randomly shuffle all letter positions
+  // create identity list so duplicates are preserved
   const flat = grid.flat();
-  for (let i = flat.length - 1; i > 0; i--) {
+  const original = flat.map((letter, idx) => ({ letter, fromIndex: idx }));
+  // shuffle a copy
+  const shuffled = original.slice();
+  for (let i = shuffled.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [flat[i], flat[j]] = [flat[j], flat[i]];
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
 
-  // Rebuild the grid
-  for (let y = 0; y < GRID_SIZE; y++) {
-    for (let x = 0; x < GRID_SIZE; x++) {
-      grid[y][x] = flat[y * GRID_SIZE + x];
+  // build final logical grid and moving tiles
+  movingTiles = [];
+  const finalGrid = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(null));
+
+  for (let toIdx = 0; toIdx < shuffled.length; toIdx++) {
+    const obj = shuffled[toIdx];
+    const fromIdx = obj.fromIndex;
+    const toX = toIdx % GRID_SIZE;
+    const toY = Math.floor(toIdx / GRID_SIZE);
+    finalGrid[toY][toX] = obj.letter;
+
+    const fromX = fromIdx % GRID_SIZE;
+    const fromY = Math.floor(fromIdx / GRID_SIZE);
+
+    if (fromX !== toX || fromY !== toY) {
+      const dist = Math.hypot(toX - fromX, toY - fromY);
+      const duration = Math.max(220, 160 + dist * 90);
+      movingTiles.push({
+        fromX, fromY, toX, toY,
+        letter: obj.letter,
+        progress: 0,
+        duration,
+        currentX: fromX,
+        currentY: fromY
+      });
     }
   }
+
+  // set logical grid to final state immediately so game logic sees final configuration
+  grid = finalGrid;
 
   // Reset the meter
   shufflePoints = 0;
   updateShuffleMeter();
-  drawGrid();
+
+  // start animation loop to animate moving tiles
+  lastAnimTime = null;
+  startAnimationLoop();
 
   // Optional visual feedback
   showWordPopup("SHUFFLE!", 0, false);

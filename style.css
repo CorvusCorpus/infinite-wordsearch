@@ -172,7 +172,8 @@ canvas {
 }
 
 #shuffleBarOuter {
-  width: 600px;
+  width: 90vw;           /* use viewport width */
+  max-width: 600px;      /* cap for desktop */
   height: 16px;
   border: 2px solid #ddd;
   background-color: #333;
@@ -266,14 +267,4 @@ canvas {
 }
 #toggleOrder:hover {
   background: #333;
-}
-
-@media (max-width: 768px) {
-  #layoutWrapper {
-    flex-direction: column;
-    align-items: center;
-  }
-  #dictionaryContainer {
-    margin-top: 20px;
-  }
 }

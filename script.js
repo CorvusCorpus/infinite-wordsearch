@@ -29,8 +29,8 @@ const letterValues = {
   B: 3, C: 3, M: 3, P: 3,
   F: 4, H: 4, V: 4, W: 4, Y: 4,
   K: 5,
-  J: 8, X: 8,
-  Q: 10, Z: 10
+  J: 8, 
+  Q: 10, Z: 10, X: 10
 };
 
 const letterProbabilities = Object.entries(letterValues).map(([letter, value]) => ({
@@ -532,11 +532,23 @@ function refillGrid() {
   }
 }
 
+function getCanvasPosition() {
+  const canvas = document.getElementById("gameCanvas");
+  return canvas.getBoundingClientRect();
+}
+
+function getLetterScreenPosition(gridX, gridY, tileSize) {
+  const canvasRect = getCanvasPosition();
+  const x = canvasRect.left + gridX * tileSize + tileSize / 2;
+  const y = canvasRect.top + gridY * tileSize + tileSize / 2;
+  return { x, y };
+}
+
 function showWordPopup(word, points, isNew) {
   const container = document.getElementById("wordPopups");
 
   const popup = document.createElement("div");
-  popup.style.top = `${-160}px`;
+  popup.style.top = `${-140}px`;
   popup.className = "wordPopup" + (isNew ? " newWord" : "");
   if (word === "SHUFFLE!") {
     popup.textContent = `🔀 SHUFFLE!`;
